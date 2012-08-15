@@ -1,0 +1,58 @@
+<?php
+
+/**
+ * @file
+ * My Downloads install.
+ */
+
+
+/**
+ * Implements hook_install().
+ */
+function mydownloads_install() {
+
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function mydownloads_uninstall() {
+  variable_del('mydownloads_field');
+  variable_del('mydownloads_zipfile');
+}
+
+/**
+ * Implements hook_schema().
+ */
+function mydownloads_schema() {
+  $schema['mydownloads_list'] = array(
+    'description' => t('My Downloads files lists.'),
+    'fields' => array(
+      'nid' => array(
+        'description' => 'The node id.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'unsigned' => TRUE,
+      ),
+      'uid' => array(
+        'description' => 'The user id. May be NULL if anonymous user.',
+        'type' => 'int',
+        'not null' => FALSE,
+        'unsigned' => TRUE,
+      ),
+      'sid' => array(
+        'description' => 'The session id. May be NULL if registered user.',
+        'type' => 'int',
+        'not null' => FALSE,
+        'unsigned' => TRUE,
+      ),
+    ),
+    'indexes' => array(
+      'nid' => array('nid'),
+      'uid' => array('uid'),
+      'sid' => array('sid'),
+    ),
+  );
+
+  return $schema;
+}

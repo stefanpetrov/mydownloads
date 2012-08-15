@@ -1,0 +1,6 @@
+name = My Downloads
+description = A simple module which creates a list with files for download.
+dependencies[] = session_api
+core = 7.x
+
+scripts[] = mydownloads.js

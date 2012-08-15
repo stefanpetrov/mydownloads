@@ -1,0 +1,1066 @@
+<?php
+
+/**
+ * @file
+ * My Downloads module.
+ */
+/* * ************************************
+ * ****** HOOKS IMPLEMENTATIONS ********
+ * ************************************ */
+
+/**
+ * Implements hook_menu()
+ */
+function mydownloads_menu() {
+  $items['admin/mydownloads'] = array(
+    'title' => 'Download cart settings',
+    'page callback' => 'mydownloads_admin_page',
+    'access arguments' => array('administer mydownloads'),
+  );
+  $items['mydownloads'] = array(
+    'title' => 'Download cart',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('mydownloads_list_form'),
+    'access arguments' => array('access mydownloads'),
+    'type' => MENU_CALLBACK,
+  );
+  $items['user/%user/mydownloads'] = array(
+    'title callback' => 'mydownloads_mydownloads_user_list_title',
+    'title arguments' => array(1),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('mydownloads_list_form', 1),
+    'access callback' => 'mydownloads_access_mydownloads_user_list',
+    'access arguments' => array(1),
+    'type' => MENU_CALLBACK,
+    'weight' => 100,
+  );
+  $items['user/%user/mydownloads/download'] = array(
+    'title' => 'Download cart arhive',
+    'page callback' => 'mydownloads_download_page',
+    'access arguments' => array('access mydownloads'),
+    'type' => MENU_CALLBACK,
+  );
+  $items['mydownloads/download'] = array(
+    'title' => 'Download cart arhive',
+    'page callback' => 'mydownloads_download_page',
+    'access arguments' => array('access mydownloads'),
+    'type' => MENU_CALLBACK,
+  );
+  $items['mydownloads/download/%'] = array(
+    'title' => 'Download cart arhive',
+    'page callback' => 'mydownloads_download',
+    'page arguments' => array(2),
+    'access arguments' => array('access mydownloads'),
+    'type' => MENU_CALLBACK,
+  );
+  $items['mydownloads/list/%/%'] = array(
+    'title' => 'Download cart',
+    'page callback' => 'mydownloads_page',
+    'page arguments' => array(2, 3),
+    'access arguments' => array('access mydownloads'),
+    'type' => MENU_CALLBACK,
+  );
+  $items['mydownloads/block'] = array(
+    'title' => 'Download cart',
+    'page callback' => 'mydownloads_list',
+    'access arguments' => array('access mydownloads'),
+    'type' => MENU_CALLBACK,
+  );
+
+  return $items;
+}
+
+/**
+ * Implements hook_permission().
+ */
+//function mydownloads_init() {
+//  drupal_add_js(drupal_get_path('module', 'mydownloads') . '/mydownloads.js', array('type' => 'file', 'scope' => 'footer'));
+//}
+
+/**
+ * Implements hook_permission().
+ */
+function mydownloads_permission() {
+  return array(
+    'administer mydownloads' => array(
+      'title' => t('administer mydownloads'),
+      'description' => t('Administer My Downloads settings.'),
+    ),
+    'view others mydownloads' => array(
+      'title' => t("View other's downloads"),
+      'description' => t('View other users downloads.'),
+    ),
+    'access mydownloads' => array(
+      'title' => t("Access downloads"),
+      'description' => t('Access downloads.'),
+    ),
+  );
+}
+
+/**
+ * Implements hook_node_update().
+ */
+function mydownloads_node_update($node) {
+  $field = variable_get('mydownloads_field', FALSE);
+  if ($field) {
+    $field_args = explode(':', $field);
+    $field_instance = field_info_instance('node', $field_args[0], $field_args[1]);
+
+    $field_name = $field_instance['field_name'];
+    $values = field_get_items('node', $node, $field_instance['field_name']);
+    if (!$values) {
+      db_delete('mydownloads_list')
+          ->condition('nid', $node->nid)
+          ->execute();
+    }
+  }
+}
+
+/**
+ * Implementation of hook_node_view()
+ *
+ */
+function mydownloads_node_view($node, $view_mode, $langcode) {
+
+}
+
+/**
+ * Implements hook_node_delete().
+ */
+function mydownloads_node_delete($node) {
+  db_delete('mydownloads_list')
+      ->condition('nid', $node->nid)
+      ->execute();
+}
+
+/**
+ * Implements hook_block_info
+ */
+function mydownloads_block_info() {
+  return array(
+    'mydownloads' => array(
+      'info' => 'My download list',
+      'visibility' => BLOCK_VISIBILITY_NOTLISTED,
+      'pages' => "mydownloads\r\nmydownloads/*"
+    )
+  );
+}
+
+/**
+ * Implements hook_block_view
+ */
+function mydownloads_block_view($delta = '') {
+  $block = array();
+  switch ($delta) {
+    case 'mydownloads':
+      $block = mydownloads_block();
+      break;
+  }
+
+  return $block;
+}
+
+/**
+ * Implements hook_block_view
+ */
+function mydownloads_theme($existing, $type, $theme, $path) {
+  $path = drupal_get_path('module', 'mydownloads');
+  return array(
+    'mydownloads_link' => array(
+      'variables' => array('title' => NULL, 'action' => NULL, 'nid' => NULL)
+    ),
+    'mydownloads_list_form' => array(
+      'render element' => 'form',
+    ),
+    'mydownloads_download_page' => array(
+      'variables' => array('delay', 'return')
+    )
+  );
+}
+
+/* * ************************************
+ * ********* Module  functions **********
+ * ************************************ */
+
+function theme_mydownloads_link($vars) {
+  if (!user_access('access mydownloads'))
+    return FALSE;
+  $options = array(
+    'query' => array(
+      'destination' => current_path(),
+      'token' => mydownloads_get_token($vars['nid'])
+    ),
+    'attributes' => array(
+      'class' => array('mydownloads', $vars['action'] . '-download')
+    ),
+  );
+
+  return '<span class="mydownloads-wrapper">' . l($vars['title'], 'mydownloads/list/' . $vars['action'] . '/' . $vars['nid'], $options) . '</span>';
+}
+
+function theme_mydownloads_list_form($variables) {
+  $form = $variables['form'];
+
+  if (!variable_get('mydownloads_field', FALSE))
+    return FALSE;
+  $list = mydownloads_list_load();
+  if (!isset($form['nid']))
+    return FALSE;
+
+  $output = '<div class="mydownloads-list-wrapper">';
+  $header = array('', '', t('Title'), t('Filename'), '', '');
+  $rows = array();
+  foreach ($form['nid'] as $key => $element) {
+    if (!is_numeric($key))
+      continue;
+    $dlink = mydownloads_link($form['node'][$key]['#value'], FALSE);
+    $row = array(
+      drupal_render($form['nid'][$key]),
+      drupal_render($form['image'][$key]),
+      l(drupal_render($form['title'][$key]), 'node/' . $key),
+      drupal_render($form['filename'][$key]),
+      drupal_render($form['size'][$key]),
+      $dlink['mydownloads-' . $key]['title'],
+    );
+    $rows[] = $row;
+  }
+  $output .= theme('table', array('header' => $header, 'rows' => $rows));
+  $output .= '</div>';
+
+  $output .= drupal_render_children($form);
+
+  return $output;
+}
+
+function theme_mydownloads_list_form_OLD($variables) {
+  $form = $variables['form'];
+
+  if (!variable_get('mydownloads_field', FALSE))
+    return FALSE;
+  $list = mydownloads_list_load();
+  if (!isset($form['nid']))
+    return FALSE;
+
+  $output = '<div class="mydownloads-list-wrapper">';
+  $output .= drupal_render($form['zipsizealert']);
+  foreach ($form['nid'] as $key => $element) {
+    if (!is_numeric($key))
+      continue;
+    $output .= '<div class="mydownloads-item clearfix nid' . $key . '">';
+    $output .= '<div class="nid">' . drupal_render($form['nid'][$key]) . '</div>';
+    $output .= '<div class="title">' . drupal_render($form['title'][$key]) . '</div>';
+    $output .= '<div class="filesize">' . drupal_render($form['size'][$key]) . '</div>';
+    $output .= drupal_render($form['token-' . $key]);
+    $output .= drupal_render($form['size-' . $key]);
+
+    $output .= '</div>';
+  }
+  $output .= '<div class="mydownloads-overlay element-invisible"></div>';
+  $output .= '</div>';
+
+  $output .= drupal_render_children($form);
+
+  return $output;
+}
+
+/**
+ * Generate My Download link
+ */
+function mydownloads_link($node = NULL, $teaser = FALSE) {
+  global $user;
+
+  if (isset($node) && is_numeric($node)) {
+    $node = node_load($node);
+  }
+
+  if (!isset($node) || !is_object($node)) {
+    return;
+  }
+
+  $field = variable_get('mydownloads_field', FALSE);
+  if (!$field)
+    return;
+
+  $links = array();
+  $action = 'add';
+  $title = variable_get('mydownloads_addlinktext', 'Add to downloads');
+
+  $field_args = explode(':', $field);
+  $field_instance = field_info_instance('node', $field_args[0], $field_args[1]);
+
+  $field_name = $field_instance['field_name'];
+  if ($node->type != $field_args[1])
+    return;
+
+  $values = field_get_items('node', $node, $field_instance['field_name']);
+
+  if (!isset($values[0]))
+    return;
+
+  if (mydownloads_in_list($node->nid)) {
+    $action = 'remove';
+    $title = variable_get('mydownloads_removelinktext', 'Remove from Downloads');
+  }
+//  $link_options = array(
+//    'query' => array(
+//      'destination' => current_path(),
+//      'token' => mydownloads_get_token($node->nid)
+//    ),
+//    'attributes' => array(
+//      'class' => array('mydownloads')
+//    ),
+//  );
+  $links['mydownloads-' . $node->nid] = array(
+    'title' => theme('mydownloads_link', array('title' => t($title), 'action' => $action, 'nid' => $node->nid/* , 'options' => $link_options */)),
+    'html' => TRUE
+  );
+
+  return $links;
+}
+
+/**
+ * Check if nid is in the list
+ */
+function mydownloads_in_list($nid = NULL, $account = NULL, $reset = FALSE) {
+  static $selected = array();
+  global $user;
+
+  if ($reset)
+    $selected = array();
+
+  if (!isset($account))
+    $account = $user;
+
+  if (!isset($nid) || is_null($nid))
+    return;
+
+  $sid = $uid = NULL;
+  if ($account->uid == 0) {
+    $sid = session_api_get_sid();
+  } else {
+    $uid = $account->uid;
+  }
+
+  if (isset($selected['s' . $sid])) {
+    if (in_array($nid, $selected['s' . $sid]))
+      return TRUE;
+  }
+  if (isset($selected['u' . $uid])) {
+    if (in_array($nid, $selected['u' . $uid]))
+      return TRUE;
+  }
+
+  $list = mydownloads_list_load($account);
+
+  if (!is_null($uid)) {
+    $selected['u' . $uid] = $list;
+  }
+  if (!is_null($sid)) {
+    $selected['s' . $sid] = $list;
+  }
+
+  return in_array($nid, $list);
+}
+
+function mydownloads_page($action, $nid) {
+  global $user;
+  $js = isset($_REQUEST['js']);
+  $token = $_REQUEST['token'];
+  $field = variable_get('mydownloads_field', FALSE);
+
+  if (!mydownloads_check_token($token, $nid)) {
+    //$error = t('Bad token. You seem to have followed an invalid link.');
+  } elseif (!$field) {
+    $error = t('You have to configure My Downloads first');
+  } else {
+    mydownloads_act($action, $nid);
+  }
+  if (isset($error)) {
+    if ($js) {
+      drupal_add_http_header('Content-Type', 'text/javascript; charset=utf-8');
+      print drupal_json_encode(array(
+            'status' => FALSE,
+            'errorMessage' => $error,
+          ));
+      exit;
+    } else {
+      drupal_set_message($error);
+      drupal_access_denied();
+      return;
+    }
+  }
+
+  if ($js) {
+    $title = $action == 'remove' ? variable_get('mydownloads_addlinktext', t('Add to downloads')) : variable_get('mydownloads_removelinktext', t('Remove from downloads'));
+    $new_action = $action == 'add' ? 'remove' : 'add';
+    $link_options = array(
+      'query' => array(
+        'destination' => current_path(),
+        'token' => mydownloads_get_token($nid)
+      ),
+      'attributes' => array(
+        'class' => array('mydownloads')
+      ),
+    );
+    drupal_add_http_header('Content-Type', 'text/javascript; charset=utf-8');
+    $count = mydownloads_count();
+    $json = array(
+      'status' => TRUE,
+      'newLink' => theme('mydownloads_link', array('title' => $title, 'action' => $new_action, 'nid' => $nid, 'options' => $link_options)),
+      'count' => $count > 0 ? '(' . $count . ')' : '',
+    );
+    print drupal_json_encode($json);
+    exit;
+  } else {
+    drupal_set_message(t('Added to Downloads pack'));
+    drupal_goto();
+  }
+}
+
+/**
+ * Get a private token used to protect links from spoofing - CSRF.
+ */
+function mydownloads_get_token($content_id) {
+// Anonymous users get a less secure token, since it must be the same for all
+// anonymous users on the entire site to work with page caching.
+  return ($GLOBALS['user']->uid) ? drupal_get_token($content_id) : md5(drupal_get_private_key() . $content_id);
+}
+
+/**
+ * Check to see if a token value matches the specified node.
+ */
+function mydownloads_check_token($token, $content_id) {
+  return mydownloads_get_token($content_id) == $token;
+}
+
+function mydownloads_act($action, $nid) {
+  global $user;
+  $sid = $uid = NULL;
+  $selected = array();
+  if ($user->uid == 0) {
+    $sid = session_api_get_sid();
+  } else {
+    $uid = $user->uid;
+  }
+
+  $selected = mydownloads_list_load();
+
+  if ($action == 'add') {
+    $selected[$nid] = $nid;
+  } elseif ($action == 'remove') {
+    unset($selected[$nid]);
+  }
+
+  mydownloads_list_update(NULL, $selected);
+}
+
+function mydownloads_list_load($account = NULL, $reset = FALSE) {
+  global $user;
+  static $list;
+  $sid = $uid = NULL;
+  if (is_null($account)) {
+    $account = $user;
+  }
+  if ($account->uid == 0) {
+    $sid = session_api_get_sid();
+  } else {
+    $uid = $account->uid;
+  }
+
+//  if (isset($list['s' . $sid]))
+//    return $list['s' . $sid];
+//  if (isset($list['u' . $uid]))
+//    return $list['u' . $uid];
+
+  $query = db_select('mydownloads_list', 'ml');
+  $query->addField('ml', 'nid');
+  if (!is_null($uid))
+    $query->condition('ml.uid', $uid);
+  if (!is_null($sid))
+    $query->condition('ml.sid', $sid);
+  $nids = $query->execute()->fetchAllKeyed(0, 0);
+
+  if (!is_null($uid))
+    $list['u' . $uid] = $nids;
+  if (!is_null($sid))
+    $list['s' . $sid] = $nids;
+
+  return $nids;
+}
+
+function mydownloads_list_update($account = NULL, $nids = array()) {
+  global $user;
+  $sid = $uid = NULL;
+  if (is_null($account)) {
+    $account = $user;
+  }
+  if ($account->uid == 0 || !isset($account->uid) || !$account->uid) {
+    $sid = session_api_get_sid();
+  } else {
+    $uid = $account->uid;
+  }
+
+  if (is_null($sid) && is_null($uid)) {
+    drupal_set_message('Invalid ID.');
+    return FALSE;
+  }
+
+  $query = db_delete('mydownloads_list');
+  if (!is_null($uid))
+    $query->condition('uid', $uid);
+  if (!is_null($sid))
+    $query->condition('sid', $sid);
+  $query->execute();
+
+  if (count($nids)) {
+    $query = db_insert('mydownloads_list')
+        ->fields(array('nid', 'uid', 'sid'));
+    foreach ($nids as $nid) {
+      $query->values(array('nid' => $nid, 'uid' => $uid, 'sid' => $sid));
+    }
+    $query->execute();
+  }
+}
+
+function mydownloads_list() {
+  drupal_add_http_header('Content-Type', 'text/javascript; charset=utf-8');
+  $json = array(
+    'status' => TRUE,
+    'content' => '<div class="content">' . drupal_render(drupal_get_form('mydownloads_list_form')) . '</div>'
+  );
+  print drupal_json_encode($json);
+  drupal_exit();
+}
+
+/**
+ * Generate mydownload page
+ */
+function mydownloads_list_form($form = array(), $form_state = array(), $account = NULL) {
+  global $user;
+  $sid = $uid = NULL;
+  if (is_null($account))
+    $account = $user;
+  if ($account->uid == 0) {
+    $sid = session_api_get_sid();
+  } else {
+    $uid = $account->uid;
+  }
+  $list = mydownloads_list_load($account);
+
+  $field = variable_get('mydownloads_field', FALSE);
+  if (!$field)
+    return FALSE;
+  $field_args = explode(':', $field);
+  $field_instance = field_info_instance('node', $field_args[0], $field_args[1]);
+  $field_name = $field_instance['field_name'];
+  $disabled = TRUE;
+
+  $nodes = node_load_multiple($list);
+
+  foreach ($nodes as $node) {
+    $size = 0;
+    $files = field_get_items('node', $node, $field_instance['field_name']);
+
+    foreach ($files as $key => $file) {
+      $size += $file['filesize'];
+    }
+
+    $images = field_get_items('node', $node, 'field_asset_images');
+    if (isset($images[0])) {
+      $form['image'][$node->nid] = array(
+        '#type' => 'markup',
+        '#markup' => theme('image_style', array('path' => $images[0]['uri'],'style_name' => 'image_grid12-3_max-height', 'alt' => check_plain($node->title))),
+      );
+    }
+
+    $form['filename'][$node->nid] = array(
+      '#type' => 'markup',
+      '#markup' => $files[0]['filename']
+    );
+
+    $form['title'][$node->nid] = array(
+      '#type' => 'markup',
+      '#markup' => $node->title
+    );
+    $form['size'][$node->nid] = array(
+      '#type' => 'markup',
+      '#markup' => format_size($size)
+    );
+    $form['nid'][$node->nid] = array(
+      '#type' => 'checkbox',
+      '#return_value' => $node->nid,
+    );
+    $form['token-' . $node->nid] = array(
+      '#type' => 'hidden',
+      '#value' => mydownloads_get_token($node->nid),
+    );
+    $form['size-' . $node->nid] = array(
+      '#type' => 'hidden',
+      '#value' => $size
+    );
+    $form['node'][$node->nid] = array(
+      '#type' => 'value',
+      '#value' => $node
+    );
+    $disabled = FALSE;
+  }
+
+  $form['zipsizealert'] = array(
+    '#type' => 'markup',
+    '#markup' => '<div class="zipsize-alert error messages element-invisible">' . t('The arcnive have reached maximum alowed size') . '</div>'
+  );
+  $form['usertoken'] = array(
+    '#type' => 'value',
+    '#value' => mydownloads_get_token($uid . $sid),
+  );
+  $form['sid'] = array(
+    '#type' => 'value',
+    '#value' => $sid,
+  );
+  $form['uid'] = array(
+    '#type' => 'value',
+    '#value' => $uid,
+  );
+  $form['return'] = array(
+    '#type' => 'value',
+    '#value' => $_GET['q'],
+  );
+
+  $form['actions']['downloadselected'] = array(
+    '#type' => 'submit',
+    '#value' => t('Download'),
+    '#disabled' => $disabled,
+    '#attributes' => array('class' => array('button-download'))
+  );
+  $form['actions']['removeselected'] = array(
+    '#type' => 'submit',
+    '#value' => t('Remove'),
+    '#disabled' => $disabled,
+    '#attributes' => array('class' => array('button-remove'))
+  );
+  $form['#attached'] = array(
+    'css' => array(
+      'type' => 'file',
+      'data' => drupal_get_path('module', 'mydownloads') . '/mydownloads.css'
+    ),
+//    'js' => array(
+//      'type' => 'file',
+//      'data' => drupal_get_path('module', 'mydownloads') . '/mydownloads-list.js'
+//    )
+  );
+  $zipsize = variable_get('mydownloads_zipsize', 0) * 1024 * 1024;
+  drupal_add_js(array('mydownloads' => array('zipsize' => $zipsize)), 'setting');
+
+  return $form;
+}
+
+//function mydownloads_list_form($form, &$form_state) {
+//  global $user;
+//  $sid = $uid = NULL;
+//  $build = array();
+//  $field = variable_get('mydownloads_field', FALSE);
+//  if (!$field) {
+//    return array(
+//      '#type' => 'markup',
+//      '#markup' => t('You have to configure My Downloads first')
+//    );
+//  }
+//  if ($user->uid == 0) {
+//    $sid = session_api_get_sid();
+//  } else {
+//    $uid = $user->uid;
+//  }
+//  $query = db_select('mydownloads_list', 'ml');
+//  $query->fields('ml', array('nid'));
+//  if (!is_null($uid))
+//    $query->condition('uid', $uid);
+//  if (!is_null($sid))
+//    $query->condition('sid', $sid);
+//  $nids = $query->execute()->fetchCol();
+//  $nodes = node_load_multiple($nids);
+//
+//  $header = array(
+//    'title' => array('data' => t('Title')),
+//    'files' => array('data' => t('Files')),
+//    'size' => array('data' => t('Size')),
+//  );
+//  $options = array();
+//
+//  $field_args = explode(':', $field);
+//  $field_instance = field_info_instance('node', $field_args[0], $field_args[1]);
+//  $field_name = $field_instance['field_name'];
+//  $disabled = TRUE;
+//
+//  foreach ($nodes as $node) {
+//    $size = 0;
+//    $values = field_get_items('node', $node, $field_instance['field_name']);
+//    $files = array();
+//    foreach ($values as $key => $file) {
+//      $files[] = theme('file_link', array('file' => (object) $file));
+//      $size += $file['filesize'];
+//    }
+//    $options[$node->nid] = array(
+//      'title' => array('data' => $node->title),
+//      'files' => array('data' => theme('item_list', array('items' => $files))),
+//      'size' => array('data' => '<span class="element-invisible filesize" id="sizes' . $node->nid . '">' . $size . '</span>' . format_size($size))
+//    );
+//    $disabled = FALSE;
+//  }
+//
+//  $form['sipsizealert'] = array(
+//    '#type' => 'markup',
+//    '#markup' => '<div class="zipsize-alert error messages element-invisible">' . t('The arcnive reached maximum alowed size') . '</div>'
+//  );
+//
+//  $form['nodes'] = array(
+//    '#type' => 'tableselect',
+//    '#header' => $header,
+//    '#options' => $options,
+//    '#empty' => t('No content available.'),
+//  );
+//  $form['usertoken'] = array(
+//    '#type' => 'value',
+//    '#value' => mydownloads_get_token($uid . $sid),
+//  );
+//  $form['sid'] = array(
+//    '#type' => 'value',
+//    '#value' => $sid,
+//  );
+//  $form['uid'] = array(
+//    '#type' => 'value',
+//    '#value' => $uid,
+//  );
+//
+//
+//  $form['actions']['downloadselected'] = array(
+//    '#type' => 'submit',
+//    '#value' => t('Download selected as archive'),
+//    '#disabled' => $disabled
+//  );
+////  $form['actions']['downloadall'] = array(
+////    '#type' => 'submit',
+////    '#value' => t('Download all as archive'),
+////    '#disabled' => $disabled
+////  );
+//  $form['actions']['removeselected'] = array(
+//    '#type' => 'submit',
+//    '#value' => t('Remove selected from list'),
+//    '#disabled' => $disabled
+//  );
+//  $zipsize = variable_get('mydownloads_zipsize', 0) * 1024 * 1024;
+//  drupal_add_js(array('mydownloads' => array('zipsize' => $zipsize)), 'setting');
+//
+//  return $form;
+//}
+
+function mydownloads_list_form_submit($form, &$form_state) {
+  global $user;
+  $values = $form_state['values'];
+  $nids = array();
+
+  foreach ($values as $key => $value) {
+    if (is_numeric($key))
+      $nids[$key] = $value;
+  }
+
+  $selected = $files = array();
+  $field = variable_get('mydownloads_field', FALSE);
+  if (!$field) {
+    drupal_set_message(t('You have to configure My Downloads first'));
+    return FALSE;
+  }
+
+
+  if ($values['op'] == t('Download')) {
+    $selected = array_filter($nids);
+  } elseif ($values['op'] == t('Download all as archive')) {
+    $selected = array_keys($nids);
+  } else if ($values['op'] == t('Remove')) {
+    $selected = array_filter($nids);
+    $diff = array_keys(array_diff($nids, $selected));
+    mydownloads_list_update(NULL, $diff);
+    return;
+  }
+
+  if ($selected) {
+    $s = implode('|', $selected);
+    $token = mydownloads_get_token($s);
+    if ($user->uid) {
+      drupal_goto('user/' . $user->uid . '/mydownloads/download', array('query' => array('token' => $token, 'selected' => $s, 'return' => base64_encode($values['return']))));
+    } else {
+      drupal_goto('mydownloads/download', array('query' => array('token' => $token, 'selected' => $s, 'return' => base64_encode($values['return']))));
+    }
+  }
+
+//  $nodes = node_load_multiple($selected);
+//  foreach ($nodes as $node) {
+//    $items = field_get_items('node', $node, $field_instance['field_name']);
+//    foreach ($items as $item) {
+//      $files[] = drupal_realpath($item['uri']);
+//    }
+//  }
+//
+//  $query = db_delete('mydownloads_list');
+//  $query->condition('nid', $selected, 'IN');
+//  if (!is_null($values['uid']))
+//    $query->condition('uid', $values['uid']);
+//  if (!is_null($values['sid']))
+//    $query->condition('sid', $values['sid']);
+//  $query->execute();
+//  include 'pclzip.lib.php';
+//
+//  if (count($files)) {
+//    $filename = md5($values['usertoken']) . '_' . date('d-m-Y') . '.zip';
+//    $tmp_file = tempnam(file_directory_temp() . '/', $filename);
+//    $archive = new PclZip($tmp_file);
+//    $archive->add($files, PCLZIP_OPT_REMOVE_ALL_PATH);
+//    header("Content-Type: application/force-download");
+//    header('Content-Description: File Transfer');
+//    header('Content-Disposition: inline; filename=' . $filename . '.zip');
+//    readfile($tmp_file);
+//
+//
+//    //exit();
+//  }
+}
+
+function mydownloads_download_page() {
+  $selected = $_GET['selected'];
+  $token = $_GET['token'];
+  $return = base64_decode($_GET['return']);
+
+  if (!mydownloads_check_token($token, $selected)) {
+    $build = array(
+      '#type' => 'markup',
+      '#markup' => t('Bad token. You seem to have followed an invalid link.')
+    );
+  } else {
+    $js = '';
+    $s = explode("|", $selected);
+    if (is_array($s)) {
+      foreach ($s as $nid) {
+        $js .= 'jQuery(".mydownloads-item.nid' . $nid . '").hide();' . PHP_EOL;
+      }
+    }
+    $delay = 5;
+    drupal_add_js('
+    var count = ' . $delay . '; //seconds
+    var t = 0;
+
+    function timedCount() {
+      jQuery(".timer").text(count-1);
+      count = count - 1;
+      if (count <= 0) {
+         clearInterval(t);
+         window.location = "' . url('mydownloads/download/' . $selected, array('absolute' => TRUE, 'query' => array('token' => $token))) . '";
+      }
+    }
+
+  jQuery(document).ready(function(){
+    ' . $js . '
+    t = setInterval("timedCount()",1000);
+    });', array('type' => 'inline', 'scope' => 'footer', 'weight' => 5));
+
+    $build = array(
+      '#type' => 'markup',
+      '#markup' => '<p>' . t('Your download will begin in <span class="timer">%num</span> seconds', array('%num' => $delay)) . '<p>' . '<p>' . l(t('Back'), $return) . '</p>'
+    );
+  }
+
+  return $build;
+}
+
+function mydownloads_count($account = NULL) {
+  $list = mydownloads_list_load($account);
+  return $list ? count($list) : 0;
+}
+
+/* * ************************************
+ * ****** Module ADMIN functions ********
+ * ************************************ */
+
+/**
+ * Admin page callback
+ */
+function mydownloads_admin_page() {
+  return drupal_get_form('mydownloads_settings_form');
+}
+
+/**
+ * Admin form
+ */
+function mydownloads_settings_form() {
+  $form = array();
+  $options = array('' => t('- None -'));
+
+  $instances = field_info_instances();
+  $field_types = field_info_field_types();
+  $bundles = field_info_bundles();
+
+  foreach ($instances as $entity_type => $type_bundles) {
+    if ($entity_type != 'node')
+      continue;
+    foreach ($type_bundles as $bundle => $bundle_instances) {
+      foreach ($bundle_instances as $field_name => $instance) {
+        $field = field_info_field($field_name);
+        if ($field['type'] == 'image' || $field['type'] == 'file') {
+          $options[$instance['field_name'] . ':' . $instance['bundle']] = $instance['label'] . ' (Node type: ' . $bundle . ')';
+        }
+      }
+    }
+  }
+
+  $form['field'] = array(
+    '#type' => 'select',
+    '#title' => t('File field'),
+    '#options' => $options,
+    '#description' => t('On pages with that field will be added link to My Downloads list'),
+    //'#required' => TRUE,
+    '#default_value' => variable_get('mydownloads_field', NULL),
+  );
+
+  $form['zipsize'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Size of the zip in MB'),
+    '#default_value' => variable_get('mydownloads_zipsize', 10),
+    '#size' => 5,
+    '#description' => t('The default maximum size of the archive. Zero (0) for no limit.'),
+    '#maxlength' => 5,
+    '#field_suffix' => t('MB')
+  );
+
+  $form['addlinktext'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Add to downloads link text'),
+    '#default_value' => variable_get('mydownloads_addlinktext', t('Add to downloads')),
+  );
+  $form['removelinktext'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Remove from downloads link text'),
+    '#default_value' => variable_get('mydownloads_removelinktext', t('Remove from downloads')),
+  );
+
+  $form['actions']['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Save')
+  );
+
+  return $form;
+}
+
+/**
+ * Admin form submit
+ */
+function mydownloads_settings_form_submit($form, &$form_state) {
+  $field = field_info_field($form_state['values']['field']);
+
+  variable_set('mydownloads_field', $form_state['values']['field']);
+
+  if ($form_state['values']['zipsize'] > 0) {
+    variable_set('mydownloads_zipsize', $form_state['values']['zipsize']);
+  } elseif ($form_state['values']['zipsize'] == 0 || $form_state['values']['zipsize'] == '') {
+    variable_set('mydownloads_zipsize', 0);
+  }
+
+  if ($form_state['values']['addlinktext'] != '') {
+    variable_set('mydownloads_addlinktext', $form_state['values']['addlinktext']);
+  }
+  if ($form_state['values']['removelinktext'] != '') {
+    variable_set('mydownloads_removelinktext', $form_state['values']['removelinktext']);
+  }
+
+  drupal_set_messate(t('Settings has been saved'));
+}
+
+/*  TRASH  */
+
+function mydownloads_download($nids) {
+  global $user;
+
+  $token = $_GET['token'];
+  $selected = $files = array();
+  $field = variable_get('mydownloads_field', FALSE);
+
+  if (!mydownloads_check_token($token, $nids)) {
+    drupal_set_message(t('Bad token. You seem to have followed an invalid link.'));
+    drupal_goto('mydownloads');
+  }
+
+  $list = mydownloads_list_load();
+  $selected = explode('|', $nids);
+  $found = FALSE;
+  foreach ($selected as $nid) {
+    if (in_array($nid, $list))
+      $found = TRUE;
+  }
+  if (!$found) {
+    drupal_set_message(t('Invalid selection.'));
+    drupal_goto('mydownloads');
+  }
+  $new_list = array_keys(array_diff($list, $selected));
+
+  $sid = $uid = NULL;
+  if ($user->uid == 0) {
+    $sid = session_api_get_sid();
+  } else {
+    $uid = $user->uid;
+  }
+
+  if (!$field) {
+    drupal_set_message(t('You have to configure My Downloads first'));
+    return FALSE;
+  }
+  $field_args = explode(':', $field);
+  $field_instance = field_info_instance('node', $field_args[0], $field_args[1]);
+  $field_name = $field_instance['field_name'];
+
+  $nodes = node_load_multiple($selected);
+  foreach ($nodes as $node) {
+    $items = field_get_items('node', $node, $field_instance['field_name']);
+    foreach ($items as $item) {
+      $files[] = drupal_realpath($item['uri']);
+    }
+  }
+
+  mydownloads_list_update(NULL, $new_list);
+
+  include 'pclzip.lib.php';
+  if (count($files)) {
+    $filename = md5(mydownloads_get_token($uid . $sid)) . '_' . date('d-m-Y') . '.zip';
+    $filename = 'SWR_Designserver_' . date('d-m-Y-H-i') . '.zip';
+    $tmp_file = tempnam(file_directory_temp() . '/', $filename);
+    $archive = new PclZip($tmp_file);
+    $archive->add($files, PCLZIP_OPT_REMOVE_ALL_PATH);
+    header("Content-Type: application/force-download");
+    header('Content-Description: File Transfer');
+    header('Content-Disposition: inline; filename=' . $filename);
+    readfile($tmp_file);
+
+    exit();
+  }
+}
+
+/**
+ * Generate mydownload block
+ */
+function mydownloads_block() {
+  $build = array(
+    'subject' => t('My Downloads'),
+    'content' => drupal_get_form('mydownloads_list_form')
+  );
+  return $build;
+}
+
+function mydownloads_access_mydownloads_user_list($account) {
+  global $user;
+  if ($user->uid == $account->uid)
+    return TRUE;
+  if (user_access('view others mydownloads'))
+    return TRUE;
+}
+
+function mydownloads_mydownloads_user_list_title($account) {
+  if (arg(0) == 'user' && is_numeric(arg(1)) && arg(2) == 'mydownloads')
+    drupal_set_title(t("@name's Download cart", array('@name' => $account->name)));
+  return t('Download cart');
+}
