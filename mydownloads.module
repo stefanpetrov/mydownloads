@@ -35,19 +35,19 @@ function mydownloads_menu() {
     'weight' => 100,
   );
   $items['user/%user/mydownloads/download'] = array(
-    'title' => 'Download cart arhive',
+    'title' => 'Download cart archive',
     'page callback' => 'mydownloads_download_page',
     'access arguments' => array('access mydownloads'),
     'type' => MENU_CALLBACK,
   );
   $items['mydownloads/download'] = array(
-    'title' => 'Download cart arhive',
+    'title' => 'Download cart archive',
     'page callback' => 'mydownloads_download_page',
     'access arguments' => array('access mydownloads'),
     'type' => MENU_CALLBACK,
   );
   $items['mydownloads/download/%'] = array(
-    'title' => 'Download cart arhive',
+    'title' => 'Download cart archive',
     'page callback' => 'mydownloads_download',
     'page arguments' => array(2),
     'access arguments' => array('access mydownloads'),
@@ -391,7 +391,9 @@ function mydownloads_page($action, $nid) {
   }
 
   if ($js) {
-    $title = $action == 'remove' ? variable_get('mydownloads_addlinktext', t('Add to downloads')) : variable_get('mydownloads_removelinktext', t('Remove from downloads'));
+    $remove_title = variable_get('mydownloads_removelinktext', 'Remove from downloads');
+    $add_title = variable_get('mydownloads_addlinktext', 'Add to downloads');
+    $title = $action == 'remove' ? t($add_title, array(), array('langcode' => 'de')) : t($remove_title, array(), array('langcode' => 'de'));
     $new_action = $action == 'add' ? 'remove' : 'add';
     $link_options = array(
       'query' => array(
@@ -412,7 +414,7 @@ function mydownloads_page($action, $nid) {
     print drupal_json_encode($json);
     exit;
   } else {
-    drupal_set_message(t('Added to Downloads pack'));
+    drupal_set_message(t('Added to Downloads pack', array(), array('langcode' => 'de')));
     drupal_goto();
   }
 }
@@ -969,7 +971,7 @@ function mydownloads_settings_form_submit($form, &$form_state) {
     variable_set('mydownloads_removelinktext', $form_state['values']['removelinktext']);
   }
 
-  drupal_set_messate(t('Settings has been saved'));
+  drupal_set_message(t('Settings has been saved'));
 }
 
 /*  TRASH  */
