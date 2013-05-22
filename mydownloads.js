@@ -39,7 +39,8 @@
                 type: 'POST',
                 url: element.href,
                 data: {
-                    js: true
+                    js: true,
+                    lang: Drupal.settings.mydownloads.lang
                 },
                 dataType: 'json',
                 success: function (data) {
