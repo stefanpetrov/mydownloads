@@ -1,9 +1,7 @@
-
 AUTHORS
 =======
 
  * Stefan Petrov @ <http://stefanpetrov.net/>
- * Jimmy Berry ("boombatower", http://drupal.org/user/214218)
 
 README.txt
 ==========
